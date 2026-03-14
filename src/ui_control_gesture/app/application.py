@@ -24,7 +24,7 @@ class GestureControlApplication:
         self._config = config or default_config()
         self._settings = SettingsStore(self._config)
         self._input = QuartzMacInputController()
-        self._overlay: OverlayRenderer = self._build_overlay()
+        self._overlay: OverlayRenderer = OverlayRenderer()
         self._hand_mapper = HandGestureMapper(self._config.gesture)
         self._head_mapper = HeadCaptionAnchorMapper()
         self._current_head_anchor = CaptionAnchor.CENTER
@@ -77,6 +77,9 @@ class GestureControlApplication:
             self._vision_running = False
         self._speech.stop()
         self._started = False
+
+    def activate_ui(self) -> None:
+        self._overlay = self._build_overlay()
 
     def recalibrate(self) -> None:
         self._current_head_anchor = CaptionAnchor.CENTER

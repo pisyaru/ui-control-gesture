@@ -20,6 +20,8 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
     except Exception as exc:  # pragma: no cover - macOS-only path
         raise RuntimeError("PyObjC AppKit is required to run the menu bar app.") from exc
 
+    app = NSApplication.sharedApplication()
+    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     app_controller = factory()
     stt_models = (
         ("Voxtral Realtime", "mistralai/Voxtral-Mini-4B-Realtime-2602"),
@@ -52,6 +54,7 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
         def applicationDidFinishLaunching_(self, _notification) -> None:
             self.status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(-1.0)
             self.status_item.button().setTitle_("UI")
+            self.controller.activate_ui()
 
             self.controller.start()
             menu = NSMenu.alloc().init()
@@ -227,8 +230,6 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             self.controller.stop()
             NSApp().terminate_(None)
 
-    app = NSApplication.sharedApplication()
-    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     delegate = AppDelegate.alloc().init()
     app.setDelegate_(delegate)
     app.run()

@@ -12,6 +12,7 @@
 - [x] Run verification checks and record review notes
 - [x] Differentiate denied vs not-determined macOS capture permissions and add recovery actions
 - [x] Make macOS capture permission requests runloop-safe on the main thread
+- [x] Defer AppKit window creation until after NSApplication startup
 
 ## Notes
 
@@ -33,3 +34,4 @@
 - Added denied-permission recovery flow that opens the relevant macOS Privacy panes when camera or microphone access has already been rejected.
 - Added unit coverage for permission summary text and privacy-settings launch actions.
 - Reworked capture permission waiting so the main run loop keeps pumping while macOS permission prompts are pending.
+- Moved AppKit overlay creation behind NSApplication startup so native windows are not created before the menu bar app is initialized.
