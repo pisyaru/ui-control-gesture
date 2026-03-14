@@ -1,20 +1,30 @@
-# GitHub Repository Setup Plan
+# Gesture Control App Implementation
 
-- [x] Confirm current workspace state and prerequisites
-- [x] Check GitHub CLI authentication for the `pisyaru` account
-- [x] Create a new public GitHub repository for this project
-- [x] Initialize local git repository and connect `origin`
-- [x] Verify remote configuration and repository visibility
+- [x] Re-ground the repo, constraints, and implementation stack
+- [x] Lock product decisions for gesture roles, STT modes, language priority, and model defaults
+- [x] Scaffold the Python app package, shared config, and task tracking docs
+- [x] Build the menu bar shell, settings state, permission checks, and overlay window primitives
+- [x] Implement MediaPipe-based hand/head tracking adapters and gesture state machines
+- [x] Implement Quartz-based cursor, click, drag, and scroll control
+- [x] Implement wake-word STT, fist-hold STT, and transcript placement orchestration
+- [x] Implement pluggable STT/TTS adapters and settings model selection
+- [x] Add unit tests for gesture mapping and speech coordination
+- [x] Run verification checks and record review notes
 
 ## Notes
 
-- Workspace is currently empty and not yet a git repository.
-- Requested outcome: create a public repository under the `pisyaru` account and connect this directory to it.
+- Right hand controls cursor, click, drag, and fist-STT.
+- Left hand provides scroll gestures so the right hand can stay occupied with UI control.
+- Head tracking is used for transcript placement, not OS navigation in v1.
+- STT priority is Korean first with English and Japanese as secondary support.
+- Wake-word and fist-recording modes must be mutually exclusive.
 
 ## Review
 
-- Repository created: `https://github.com/pisyaru/ui-control-gesture`
-- Visibility verified as `PUBLIC`
-- Default branch is `main`
-- Local `origin` points to `https://github.com/pisyaru/ui-control-gesture.git`
-- Local `main` is tracking `origin/main`
+- Added a Python app shell under `src/ui_control_gesture/` with AppKit menu bar wiring, MediaPipe vision pipeline, Quartz input control, overlay rendering, and modular audio adapters.
+- Verified syntax with `python3 -m compileall src tests`.
+- Verified logic with `PYTHONPATH=src python3 -m pytest tests/unit -q` and observed `17 passed`.
+- Installed `pytest` in the user Python environment because it was not present locally.
+- Fixed review findings around wake recognizer self-join, stale wake buffers, STT-off suppression of in-flight wake transcripts, and vision runtime error surfacing.
+- Created a repo-local `.venv`, installed runtime dependencies with `pip install -e .`, and downloaded `models/hand_landmarker.task` plus `models/face_landmarker.task`.
+- Confirmed `.venv/` and `models/` are ignored by git so only code and docs are pushed.
