@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from threading import Lock, Timer
+from threading import Lock, Timer, current_thread, main_thread
 
 from ui_control_gesture.app.types import CaptionAnchor, CursorPoint, HandFeedback, TranscriptResult
 
@@ -33,20 +33,20 @@ class OverlayRenderer:
         with self._lock:
             self._state.hand_feedback = primary_feedback
         if self._appkit is not None:  # pragma: no cover - runtime only
-            self._render()
+            self._request_render()
 
     def show_transcript(self, transcript: TranscriptResult, ttl_seconds: float) -> None:
         with self._lock:
             self._state.transcript = transcript
         if self._appkit is not None:  # pragma: no cover - runtime only
-            self._render()
+            self._request_render()
         Timer(ttl_seconds, self.clear_transcript).start()
 
     def clear_transcript(self) -> None:
         with self._lock:
             self._state.transcript = None
         if self._appkit is not None:  # pragma: no cover - runtime only
-            self._render()
+            self._request_render()
 
     def current_state(self) -> OverlayState:
         with self._lock:
@@ -58,6 +58,9 @@ class OverlayRenderer:
     def _render(self) -> None:  # pragma: no cover - runtime only
         # Placeholder AppKit hook. The app shell reads `current_state()` and paints the floating labels.
         return None
+
+    def _request_render(self) -> None:  # pragma: no cover - runtime only
+        self._render()
 
     def show_caption(
         self,
@@ -92,8 +95,18 @@ class AppKitOverlayWindow(OverlayRenderer):
         super().__init__()
         self._window = None
         self._label = None
+        self._render_bridge = None
         if self._appkit is not None:  # pragma: no cover - runtime only
+            self._render_bridge = _build_main_thread_bridge(self._render)
             self._build_window()
+
+    def _request_render(self) -> None:  # pragma: no cover - runtime only
+        if current_thread() is main_thread():
+            self._render()
+            return
+        if self._render_bridge is None:
+            return
+        self._render_bridge.performSelectorOnMainThread_withObject_waitUntilDone_("invoke:", None, False)
 
     def _build_window(self) -> None:  # pragma: no cover - runtime only
         appkit = self._appkit
@@ -159,3 +172,24 @@ class AppKitOverlayWindow(OverlayRenderer):
         y = max(0.0, min(frame.size.height - 96.0, frame.size.height - target.y))
         self._window.setFrameOrigin_((x, y))
         self._window.orderFrontRegardless()
+
+
+def _build_main_thread_bridge(callback):  # pragma: no cover - runtime only
+    try:
+        from Foundation import NSObject
+        from objc import super as objc_super
+    except ImportError:
+        return None
+
+    class _MainThreadBridge(NSObject):
+        def initWithCallback_(self, bound_callback):
+            self = objc_super(_MainThreadBridge, self).init()
+            if self is None:
+                return None
+            self._callback = bound_callback
+            return self
+
+        def invoke_(self, _sender) -> None:
+            self._callback()
+
+    return _MainThreadBridge.alloc().initWithCallback_(callback)

@@ -10,3 +10,4 @@
 - For macOS TCC permissions, treat `denied` as a separate UX path from `not_determined`; once access was denied, the app must direct the user to System Settings instead of waiting for another prompt.
 - When waiting for macOS AVFoundation permission callbacks on the main thread, keep the AppKit run loop pumping; blocking with `Event.wait()` can prevent the prompt and callback from completing.
 - Do not create `NSWindow` or other AppKit UI objects before `NSApplication.sharedApplication()` exists and the menu-bar app has entered its startup lifecycle.
+- Any AppKit `NSWindow` show/hide/update call triggered by timers, vision callbacks, or worker threads must be marshaled back to the main thread first.

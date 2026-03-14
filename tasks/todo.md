@@ -13,6 +13,7 @@
 - [x] Differentiate denied vs not-determined macOS capture permissions and add recovery actions
 - [x] Make macOS capture permission requests runloop-safe on the main thread
 - [x] Defer AppKit window creation until after NSApplication startup
+- [x] Force all AppKit overlay window updates onto the main thread
 
 ## Notes
 
@@ -35,3 +36,4 @@
 - Added unit coverage for permission summary text and privacy-settings launch actions.
 - Reworked capture permission waiting so the main run loop keeps pumping while macOS permission prompts are pending.
 - Moved AppKit overlay creation behind NSApplication startup so native windows are not created before the menu bar app is initialized.
+- Routed overlay render requests through a main-thread bridge so transcript timers and vision callbacks never touch `NSWindow` off the main thread.
