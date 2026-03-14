@@ -21,6 +21,21 @@ class PermissionTests(unittest.TestCase):
         self.assertIn("Privacy & Security > Camera", summary)
         self.assertIn("allow the terminal app or Python", summary)
 
+    def test_permission_summary_mentions_pending_camera_recovery(self) -> None:
+        state = PermissionState(
+            camera=False,
+            camera_status="not_determined",
+            microphone=False,
+            microphone_status="not_determined",
+            accessibility=True,
+            input_monitoring=True,
+        )
+
+        summary = permission_summary_text(state)
+
+        self.assertIn("camera access is still pending", summary)
+        self.assertIn("microphone access is still pending", summary)
+
     @patch("ui_control_gesture.system.permissions.subprocess.run")
     def test_open_privacy_settings_uses_expected_url(self, run_mock: Mock) -> None:
         run_mock.return_value.returncode = 0

@@ -11,6 +11,7 @@
 - [x] Add unit tests for gesture mapping and speech coordination
 - [x] Run verification checks and record review notes
 - [x] Differentiate denied vs not-determined macOS capture permissions and add recovery actions
+- [x] Make macOS capture permission requests runloop-safe on the main thread
 
 ## Notes
 
@@ -31,3 +32,4 @@
 - Confirmed `.venv/` and `models/` are ignored by git so only code and docs are pushed.
 - Added denied-permission recovery flow that opens the relevant macOS Privacy panes when camera or microphone access has already been rejected.
 - Added unit coverage for permission summary text and privacy-settings launch actions.
+- Reworked capture permission waiting so the main run loop keeps pumping while macOS permission prompts are pending.

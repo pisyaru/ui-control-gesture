@@ -174,6 +174,11 @@ class GestureControlApplication:
                 "camera permission is denied by macOS. Open System Settings > Privacy & Security > Camera "
                 "and allow the terminal app or Python, then relaunch the app."
             )
+        if permission_state.camera_status == "not_determined":
+            return (
+                "camera permission is still pending. If no macOS prompt appeared, open System Settings > Privacy "
+                "& Security > Camera, allow the terminal app or Python, then relaunch the app."
+            )
         return "camera permission is required before gesture tracking can start."
 
     def _microphone_permission_error(self, permission_state: PermissionState) -> str:
@@ -181,6 +186,11 @@ class GestureControlApplication:
             return (
                 "microphone permission is denied by macOS. Open System Settings > Privacy & Security > Microphone "
                 "and allow the terminal app or Python, then relaunch the app."
+            )
+        if permission_state.microphone_status == "not_determined":
+            return (
+                "microphone permission is still pending. If no macOS prompt appeared, open System Settings > Privacy "
+                "& Security > Microphone, allow the terminal app or Python, then relaunch the app."
             )
         return "microphone permission is required for STT."
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import subprocess
-from threading import Event
+import time
+from threading import Event, current_thread, main_thread
 
 
 def _load_permissions_symbols():
@@ -116,8 +117,25 @@ def _request_capture_access(media_type) -> bool:
         finished.set()
 
     capture_device.requestAccessForMediaType_completionHandler_(media_type, completion)
-    finished.wait(timeout=30.0)
+    _wait_for_permission_completion(finished, timeout_seconds=30.0)
     return bool(granted_state["value"])
+
+
+def _wait_for_permission_completion(finished: Event, timeout_seconds: float) -> None:
+    if current_thread() is not main_thread():
+        finished.wait(timeout=timeout_seconds)
+        return
+
+    try:
+        from Foundation import NSDate, NSRunLoop
+    except ImportError:  # pragma: no cover - runtime-only dependency
+        finished.wait(timeout=timeout_seconds)
+        return
+
+    deadline = time.monotonic() + timeout_seconds
+    run_loop = NSRunLoop.currentRunLoop()
+    while not finished.is_set() and time.monotonic() < deadline:
+        run_loop.runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.05))
 
 
 def list_camera_devices() -> list[CameraDevice]:
@@ -178,9 +196,17 @@ def permission_summary_text(state: PermissionState) -> str:
         lines.append(
             "camera is denied. Open System Settings > Privacy & Security > Camera and allow the terminal app or Python."
         )
+    elif state.camera_status == "not_determined":
+        lines.append(
+            "camera access is still pending. If no prompt appears, open System Settings > Privacy & Security > Camera and allow the terminal app or Python."
+        )
     if state.microphone_status == "denied":
         lines.append(
             "microphone is denied. Open System Settings > Privacy & Security > Microphone and allow the terminal app or Python."
+        )
+    elif state.microphone_status == "not_determined":
+        lines.append(
+            "microphone access is still pending. If no prompt appears, open System Settings > Privacy & Security > Microphone and allow the terminal app or Python."
         )
     return "\n".join(lines)
 
