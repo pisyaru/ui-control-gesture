@@ -6,22 +6,28 @@ import time
 from threading import Event, current_thread, main_thread
 
 
-def _load_permissions_symbols():
+def _load_accessibility_symbols():
     try:
         from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+    except ImportError:  # pragma: no cover - import depends on runtime
+        return None
+    return AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+
+
+def _load_capture_symbols():
+    try:
         from AVFoundation import AVCaptureDevice, AVMediaTypeAudio, AVMediaTypeVideo
+    except ImportError:  # pragma: no cover - import depends on runtime
+        return None
+    return AVCaptureDevice, AVMediaTypeAudio, AVMediaTypeVideo
+
+
+def _load_input_monitoring_symbols():
+    try:
         from Quartz import CGPreflightListenEventAccess, CGRequestListenEventAccess
     except ImportError:  # pragma: no cover - import depends on runtime
         return None
-    return (
-        AXIsProcessTrustedWithOptions,
-        kAXTrustedCheckOptionPrompt,
-        AVCaptureDevice,
-        AVMediaTypeAudio,
-        AVMediaTypeVideo,
-        CGPreflightListenEventAccess,
-        CGRequestListenEventAccess,
-    )
+    return CGPreflightListenEventAccess, CGRequestListenEventAccess
 
 
 @dataclass(slots=True)
@@ -56,23 +62,33 @@ PRIVACY_SETTINGS_URLS = {
 
 
 def get_permission_status() -> PermissionStatus:
-    symbols = _load_permissions_symbols()
-    if symbols is None:
-        return PermissionStatus(accessibility_trusted=False, input_monitoring_trusted=False)
-    ax_trusted, _, _, _, _, preflight_listen, _ = symbols
+    accessibility_symbols = _load_accessibility_symbols()
+    input_monitoring_symbols = _load_input_monitoring_symbols()
+    accessibility_trusted = False
+    if accessibility_symbols is not None:
+        ax_trusted, _ = accessibility_symbols
+        accessibility_trusted = bool(ax_trusted({}))
+    input_monitoring_trusted = False
+    if input_monitoring_symbols is not None:
+        preflight_listen, _ = input_monitoring_symbols
+        input_monitoring_trusted = bool(preflight_listen())
     return PermissionStatus(
-        accessibility_trusted=bool(ax_trusted({})),
-        input_monitoring_trusted=bool(preflight_listen()),
+        accessibility_trusted=accessibility_trusted,
+        input_monitoring_trusted=input_monitoring_trusted,
     )
 
 
 def _request_permission_status() -> PermissionStatus:
-    symbols = _load_permissions_symbols()
-    if symbols is None:
-        return PermissionStatus(accessibility_trusted=False, input_monitoring_trusted=False)
-    ax_trusted, prompt_key, _, _, _, preflight_listen, request_listen = symbols
-    accessibility = bool(ax_trusted({prompt_key: True}))
-    input_monitoring = bool(preflight_listen()) or bool(request_listen())
+    accessibility_symbols = _load_accessibility_symbols()
+    input_monitoring_symbols = _load_input_monitoring_symbols()
+    accessibility = False
+    if accessibility_symbols is not None:
+        ax_trusted, prompt_key = accessibility_symbols
+        accessibility = bool(ax_trusted({prompt_key: True}))
+    input_monitoring = False
+    if input_monitoring_symbols is not None:
+        preflight_listen, request_listen = input_monitoring_symbols
+        input_monitoring = bool(preflight_listen()) or bool(request_listen())
     return PermissionStatus(accessibility_trusted=accessibility, input_monitoring_trusted=input_monitoring)
 
 
@@ -86,10 +102,10 @@ def _capture_status_name(status: int) -> str:
 
 
 def _query_capture_authorization() -> tuple[tuple[bool, str], tuple[bool, str]]:
-    symbols = _load_permissions_symbols()
+    symbols = _load_capture_symbols()
     if symbols is None:
         return (False, "unavailable"), (False, "unavailable")
-    _, _, capture_device, media_audio, media_video, _, _ = symbols
+    capture_device, media_audio, media_video = symbols
     camera_status = int(capture_device.authorizationStatusForMediaType_(media_video))
     microphone_status = int(capture_device.authorizationStatusForMediaType_(media_audio))
     return (
@@ -99,10 +115,10 @@ def _query_capture_authorization() -> tuple[tuple[bool, str], tuple[bool, str]]:
 
 
 def _request_capture_access(media_type) -> bool:
-    symbols = _load_permissions_symbols()
+    symbols = _load_capture_symbols()
     if symbols is None:
         return False
-    _, _, capture_device, _, _, _, _ = symbols
+    capture_device, _, _ = symbols
     status = int(capture_device.authorizationStatusForMediaType_(media_type))
     if status == 3:
         return True
@@ -139,10 +155,10 @@ def _wait_for_permission_completion(finished: Event, timeout_seconds: float) -> 
 
 
 def list_camera_devices() -> list[CameraDevice]:
-    symbols = _load_permissions_symbols()
+    symbols = _load_capture_symbols()
     if symbols is None:
         return []
-    _, _, capture_device, _, media_video, _, _ = symbols
+    capture_device, _, media_video = symbols
     devices = list(capture_device.devicesWithMediaType_(media_video) or [])
     return [
         CameraDevice(index=index, name=str(device.localizedName()), unique_id=str(device.uniqueID()))
@@ -165,12 +181,12 @@ def query_permission_state() -> PermissionState:
 
 def prompt_for_permissions() -> PermissionState:  # type: ignore[override]
     status = _request_permission_status()
-    symbols = _load_permissions_symbols()
+    symbols = _load_capture_symbols()
     if symbols is None:
         camera, camera_status = False, "unavailable"
         microphone, microphone_status = False, "unavailable"
     else:
-        _, _, _, media_audio, media_video, _, _ = symbols
+        _, media_audio, media_video = symbols
         camera = _request_capture_access(media_video)
         microphone = _request_capture_access(media_audio)
         camera_status = "authorized" if camera else _query_capture_authorization()[0][1]
