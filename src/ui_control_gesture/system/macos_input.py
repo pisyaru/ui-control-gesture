@@ -30,6 +30,7 @@ class MacOSInputController:
         self._quartz = _load_quartz()
         self._left_down = False
         self._right_down = False
+        self._cursor_hidden = False
 
     def screen_size(self) -> ScreenSize:
         if self._quartz is None:
@@ -71,6 +72,16 @@ class MacOSInputController:
             event_type = self._quartz.kCGEventMouseMoved
         event = self._quartz.CGEventCreateMouseEvent(None, event_type, (cursor.x, cursor.y), 0)
         self._quartz.CGEventPost(self._quartz.kCGHIDEventTap, event)
+
+    def set_cursor_visible(self, visible: bool) -> None:
+        if self._quartz is None:  # pragma: no cover - runtime only
+            return
+        if visible and self._cursor_hidden:
+            self._quartz.CGDisplayShowCursor(self._quartz.CGMainDisplayID())
+            self._cursor_hidden = False
+        elif not visible and not self._cursor_hidden:
+            self._quartz.CGDisplayHideCursor(self._quartz.CGMainDisplayID())
+            self._cursor_hidden = True
 
     def left_down(self, cursor: CursorPoint) -> None:
         self._left_down = True

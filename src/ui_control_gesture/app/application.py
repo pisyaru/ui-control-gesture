@@ -76,6 +76,7 @@ class GestureControlApplication:
             self._vision.stop()
             self._vision_running = False
         self._speech.stop()
+        self._input.set_cursor_visible(True)
         self._started = False
 
     def activate_ui(self) -> None:
@@ -94,11 +95,13 @@ class GestureControlApplication:
             self._speech.update_head_anchor(self._current_head_anchor)
 
         if not config.toggles.hand_enabled:
+            self._input.set_cursor_visible(True)
             self._overlay.show_hand_feedback([])
             return
 
         screen = self._input.screen_frame()
         actions, feedback = self._hand_mapper.map(snapshot.hands, screen_width=screen.width, screen_height=screen.height)
+        self._input.set_cursor_visible(not bool(feedback))
         self._overlay.show_hand_feedback(feedback)
 
         for action in actions:
@@ -135,6 +138,8 @@ class GestureControlApplication:
 
         if old_config.camera_index != config.camera_index:
             self._restart_vision()
+        if not config.toggles.hand_enabled:
+            self._input.set_cursor_visible(True)
 
     def _handle_transcript(self, text: str, anchor: CaptionAnchor, cursor: CursorPoint | None) -> None:
         self._overlay.show_caption(
@@ -145,6 +150,7 @@ class GestureControlApplication:
         )
 
     def _handle_runtime_error(self, message: str) -> None:
+        self._input.set_cursor_visible(True)
         self._overlay.show_caption(
             text=f"runtime error: {message}",
             anchor=CaptionAnchor.CENTER,

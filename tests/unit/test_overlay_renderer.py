@@ -34,6 +34,30 @@ class OverlayRendererTests(unittest.TestCase):
         self.assertEqual(renderer.request_render_calls, 1)
         self.assertEqual(renderer.render_calls, 0)
 
+    def test_hand_feedback_accepts_multiple_skeletons(self) -> None:
+        renderer = _RecordingOverlayRenderer()
+
+        renderer.show_hand_feedback(
+            [
+                HandFeedback(
+                    handedness=Handedness.RIGHT,
+                    cursor=CursorPoint(x=100, y=120),
+                    state_label="move",
+                    skeleton_points=(CursorPoint(x=100, y=120),),
+                ),
+                HandFeedback(
+                    handedness=Handedness.LEFT,
+                    cursor=CursorPoint(x=220, y=240),
+                    state_label="scroll",
+                    skeleton_points=(CursorPoint(x=220, y=240),),
+                ),
+            ]
+        )
+
+        state = renderer.current_state()
+        self.assertEqual(len(state.hand_feedback), 2)
+        self.assertEqual(renderer.request_render_calls, 1)
+
     @patch("ui_control_gesture.overlay.renderer.Timer")
     def test_transcript_clear_uses_request_render_path(self, timer_mock: Mock) -> None:
         renderer = _RecordingOverlayRenderer()

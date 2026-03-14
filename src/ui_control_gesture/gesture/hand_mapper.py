@@ -26,23 +26,44 @@ class PrimaryHandState:
 
 
 class PrimaryHandMapper:
-    def __init__(self, config: GestureConfig, screen_size: ScreenSize) -> None:
+    def __init__(self, config: GestureConfig, screen_size: ScreenSize, *, allow_fist_stt: bool = False) -> None:
         self._config = config
         self._screen_size = screen_size
         self._state = PrimaryHandState()
+        self._allow_fist_stt = allow_fist_stt
+
+    def is_pointer_gesture(self, hand: HandObservation) -> bool:
+        if self._allow_fist_stt and (self._state.fist_active or hand.fist_closed):
+            return True
+        return any(
+            (
+                self._state.left_active,
+                self._state.right_active,
+                self._state.left_pinch_frames > 0,
+                self._state.right_pinch_frames > 0,
+                hand.index_thumb_touching,
+                hand.middle_thumb_touching,
+            )
+        )
 
     def map(self, hand: HandObservation) -> tuple[list[GestureAction], HandFeedback]:
         cursor = self._cursor_from_hand(hand)
         actions = [GestureAction(kind=GestureActionType.MOVE_CURSOR, handedness=hand.handedness, cursor=cursor)]
         state_label = "move"
 
-        if hand.fist_closed and not self._state.fist_active and not self._state.left_active and not self._state.right_active:
+        if (
+            self._allow_fist_stt
+            and hand.fist_closed
+            and not self._state.fist_active
+            and not self._state.left_active
+            and not self._state.right_active
+        ):
             self._state.fist_active = True
             self._state.left_pinch_frames = 0
             self._state.right_pinch_frames = 0
             actions.append(GestureAction(kind=GestureActionType.START_FIST_STT, handedness=hand.handedness, cursor=cursor))
             state_label = "fist-record"
-        elif not hand.fist_closed and self._state.fist_active:
+        elif self._allow_fist_stt and not hand.fist_closed and self._state.fist_active:
             self._state.fist_active = False
             actions.append(GestureAction(kind=GestureActionType.STOP_FIST_STT, handedness=hand.handedness, cursor=cursor))
             state_label = "fist-release"
@@ -80,7 +101,12 @@ class PrimaryHandMapper:
             self._state.right_pinch_frames = 0
 
         self._state.last_cursor = cursor
-        feedback = self._feedback_from_hand(hand, cursor=cursor, state_label=state_label)
+        feedback = HandFeedback(
+            handedness=hand.handedness,
+            cursor=cursor,
+            state_label=state_label,
+            skeleton_points=_project_skeleton(hand, self._screen_size),
+        )
         return actions, feedback
 
     def _cursor_from_hand(self, hand: HandObservation) -> CursorPoint:
@@ -90,41 +116,37 @@ class PrimaryHandMapper:
         y = min(max(y, 0.0), self._screen_size.height - 1.0)
         return CursorPoint(x=x, y=y)
 
-    def _feedback_from_hand(self, hand: HandObservation, *, cursor: CursorPoint, state_label: str) -> HandFeedback:
-        return HandFeedback(
-            handedness=hand.handedness,
-            cursor=cursor,
-            state_label=state_label,
-            skeleton_points=_project_skeleton(hand, self._screen_size),
-        )
-
 
 class SecondaryHandMapper:
     def __init__(self, config: GestureConfig, screen_size: ScreenSize) -> None:
         self._config = config
         self._screen_size = screen_size
+        self._pointer = PrimaryHandMapper(config, screen_size, allow_fist_stt=False)
 
     def map(self, hand: HandObservation) -> tuple[list[GestureAction], HandFeedback]:
-        state_label = "ready"
-        if abs(hand.middle_swipe_velocity_y) < self._config.scroll_deadzone:
-            return [], self._feedback_from_hand(hand, state_label=state_label)
-        state_label = "scroll"
+        if self._pointer.is_pointer_gesture(hand):
+            return self._pointer.map(hand)
+        if not self._is_scroll_posture(hand) or abs(hand.middle_swipe_velocity_y) < self._config.scroll_deadzone:
+            return [], self._feedback_from_hand(hand, state_label="ready")
         return [
             GestureAction(
                 kind=GestureActionType.SCROLL,
                 handedness=hand.handedness,
                 scroll=ScrollDelta(dy=hand.middle_swipe_velocity_y),
             )
-        ], self._feedback_from_hand(hand, state_label=state_label)
+        ], self._feedback_from_hand(hand, state_label="scroll")
 
     def _feedback_from_hand(self, hand: HandObservation, *, state_label: str) -> HandFeedback:
-        anchor = _project_point(hand.palm_x, hand.palm_y, self._screen_size)
         return HandFeedback(
             handedness=hand.handedness,
-            cursor=anchor,
+            cursor=_project_point(hand.palm_x, hand.palm_y, self._screen_size),
             state_label=state_label,
             skeleton_points=_project_skeleton(hand, self._screen_size),
         )
+
+    @staticmethod
+    def _is_scroll_posture(hand: HandObservation) -> bool:
+        return not hand.fist_closed and not hand.index_thumb_touching and not hand.middle_thumb_touching
 
 
 class HandGestureMapper:

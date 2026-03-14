@@ -170,7 +170,6 @@ class AppKitOverlayWindow(OverlayRenderer):
         appkit = self._appkit
         if appkit is None or self._window is None or self._canvas is None:
             return
-
         state = self.current_state()
         if not state.hand_feedback and state.transcript is None:
             self._window.orderOut_(None)
@@ -263,16 +262,8 @@ def _build_overlay_canvas(renderer: AppKitOverlayWindow, frame_rect):  # pragma:
 
 def _draw_hand_feedback(appkit, ns_string_class, feedback: HandFeedback, screen_height: float) -> None:  # pragma: no cover - runtime only
     if feedback.skeleton_points:
-        stroke_color = (
-            appkit.NSColor.systemCyanColor()
-            if feedback.handedness is Handedness.RIGHT
-            else appkit.NSColor.systemGreenColor()
-        )
-        fill_color = (
-            appkit.NSColor.systemBlueColor()
-            if feedback.handedness is Handedness.RIGHT
-            else appkit.NSColor.systemYellowColor()
-        )
+        stroke_color = appkit.NSColor.systemCyanColor() if feedback.handedness is Handedness.RIGHT else appkit.NSColor.systemGreenColor()
+        fill_color = appkit.NSColor.systemBlueColor() if feedback.handedness is Handedness.RIGHT else appkit.NSColor.systemYellowColor()
         stroke_color.setStroke()
         for start_index, end_index in HAND_CONNECTIONS:
             if start_index >= len(feedback.skeleton_points) or end_index >= len(feedback.skeleton_points):

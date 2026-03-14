@@ -58,14 +58,14 @@ class HandGestureMapperTests(unittest.TestCase):
         release_actions, _ = mapper.map([make_hand(Handedness.RIGHT, index_touch=False)], screen_width=1000, screen_height=800)
         self.assertIn(GestureActionType.LEFT_UP, action_kinds(release_actions))
 
-    def test_fist_starts_and_stops_stt(self) -> None:
+    def test_fist_no_longer_starts_stt(self) -> None:
         mapper = HandGestureMapper(GestureConfig())
 
         start_actions, _ = mapper.map([make_hand(Handedness.RIGHT, fist=True)], screen_width=1000, screen_height=800)
         stop_actions, _ = mapper.map([make_hand(Handedness.RIGHT, fist=False)], screen_width=1000, screen_height=800)
 
-        self.assertIn(GestureActionType.START_FIST_STT, action_kinds(start_actions))
-        self.assertIn(GestureActionType.STOP_FIST_STT, action_kinds(stop_actions))
+        self.assertNotIn(GestureActionType.START_FIST_STT, action_kinds(start_actions))
+        self.assertNotIn(GestureActionType.STOP_FIST_STT, action_kinds(stop_actions))
 
     def test_left_hand_scroll_is_independent(self) -> None:
         mapper = HandGestureMapper(GestureConfig(scroll_deadzone=0.01))
@@ -128,6 +128,37 @@ class HandGestureMapperTests(unittest.TestCase):
         left_feedback = next(item for item in feedback if item.handedness is Handedness.LEFT)
         self.assertAlmostEqual(right_feedback.skeleton_points[0].x, 800.0)
         self.assertAlmostEqual(left_feedback.skeleton_points[0].x, 200.0)
+
+    def test_left_hand_can_click_without_losing_scroll_mode(self) -> None:
+        mapper = HandGestureMapper(GestureConfig())
+
+        click_actions, _ = mapper.map(
+            [
+                make_hand(Handedness.RIGHT),
+                make_hand(Handedness.LEFT, index_touch=True),
+            ],
+            screen_width=1000,
+            screen_height=800,
+        )
+        mapper.map(
+            [
+                make_hand(Handedness.RIGHT),
+                make_hand(Handedness.LEFT, index_touch=False),
+            ],
+            screen_width=1000,
+            screen_height=800,
+        )
+        scroll_actions, _ = mapper.map(
+            [
+                make_hand(Handedness.RIGHT),
+                make_hand(Handedness.LEFT, index_touch=False, swipe=0.3),
+            ],
+            screen_width=1000,
+            screen_height=800,
+        )
+
+        self.assertIn(GestureActionType.LEFT_DOWN, action_kinds(click_actions))
+        self.assertIn(GestureActionType.SCROLL, action_kinds(scroll_actions))
 
 
 if __name__ == "__main__":

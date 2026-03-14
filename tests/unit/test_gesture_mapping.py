@@ -41,7 +41,7 @@ class GestureMappingTests(unittest.TestCase):
         )
         self.assertEqual(released_feedback.state_label, "left-release")
 
-    def test_primary_hand_emits_fist_recording_transitions(self) -> None:
+    def test_primary_hand_no_longer_emits_fist_recording_transitions(self) -> None:
         mapper = PrimaryHandMapper(GestureConfig(), ScreenSize(width=1000.0, height=800.0))
         start_actions, _ = mapper.map(
             HandObservation(
@@ -55,7 +55,7 @@ class GestureMappingTests(unittest.TestCase):
         )
         self.assertEqual(
             [action.kind for action in start_actions],
-            [GestureActionType.MOVE_CURSOR, GestureActionType.START_FIST_STT],
+            [GestureActionType.MOVE_CURSOR],
         )
 
         stop_actions, _ = mapper.map(
@@ -70,7 +70,7 @@ class GestureMappingTests(unittest.TestCase):
         )
         self.assertEqual(
             [action.kind for action in stop_actions],
-            [GestureActionType.MOVE_CURSOR, GestureActionType.STOP_FIST_STT],
+            [GestureActionType.MOVE_CURSOR],
         )
 
     def test_secondary_hand_maps_middle_swipe_to_scroll(self) -> None:
@@ -88,6 +88,24 @@ class GestureMappingTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].kind, GestureActionType.SCROLL)
         self.assertEqual(feedback.state_label, "scroll")
+
+    def test_secondary_hand_can_click_and_drag(self) -> None:
+        mapper = SecondaryHandMapper(GestureConfig(), ScreenSize(width=1000.0, height=800.0))
+        actions, feedback = mapper.map(
+            HandObservation(
+                handedness=Handedness.LEFT,
+                palm_x=0.25,
+                palm_y=0.3,
+                palm_roll=0.0,
+                landmarks=(NormalizedPoint(x=0.25, y=0.3),),
+                index_thumb_touching=True,
+            )
+        )
+        self.assertEqual(
+            [action.kind for action in actions],
+            [GestureActionType.MOVE_CURSOR, GestureActionType.LEFT_DOWN],
+        )
+        self.assertEqual(feedback.state_label, "left-drag")
 
     def test_head_anchor_mapper_uses_five_zones(self) -> None:
         mapper = HeadAnchorMapper(yaw_threshold=0.05, pitch_threshold=0.05)
