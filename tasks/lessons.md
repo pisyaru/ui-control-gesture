@@ -7,3 +7,4 @@
 - When user-facing docs are added or updated, consider whether a Korean counterpart or cross-linked localized version is expected for this project.
 - In PyObjC `NSObject` subclasses, use `objc.super`, not Python `super()`, for `init()` and related Objective-C lifecycle methods.
 - On macOS, request camera permission from the app layer before starting OpenCV capture on a worker thread; do not rely on OpenCV to trigger the system prompt.
+- For macOS TCC permissions, treat `denied` as a separate UX path from `not_determined`; once access was denied, the app must direct the user to System Settings instead of waiting for another prompt.

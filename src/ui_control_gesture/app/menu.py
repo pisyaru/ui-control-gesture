@@ -83,6 +83,21 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             permissions = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Permissions", "showPermissions_", "")
             permissions.setTarget_(self)
             menu.addItem_(permissions)
+            open_camera_settings = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "Open Camera Settings",
+                "openCameraSettings_",
+                "",
+            )
+            open_camera_settings.setTarget_(self)
+            menu.addItem_(open_camera_settings)
+
+            open_microphone_settings = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "Open Microphone Settings",
+                "openMicrophoneSettings_",
+                "",
+            )
+            open_microphone_settings.setTarget_(self)
+            menu.addItem_(open_microphone_settings)
 
             recalibrate = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Recalibrate", "recalibrate_", "")
             recalibrate.setTarget_(self)
@@ -181,6 +196,12 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
 
         def recalibrate_(self, _sender) -> None:
             self.controller.recalibrate()
+
+        def openCameraSettings_(self, _sender) -> None:
+            self.controller.open_camera_settings()
+
+        def openMicrophoneSettings_(self, _sender) -> None:
+            self.controller.open_microphone_settings()
 
         def selectSttModel_(self, sender) -> None:
             model_id = str(sender.representedObject())

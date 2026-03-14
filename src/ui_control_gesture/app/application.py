@@ -7,7 +7,15 @@ from ui_control_gesture.gesture.head_mapper import HeadCaptionAnchorMapper
 from ui_control_gesture.overlay.renderer import AppKitOverlayWindow, OverlayRenderer
 from ui_control_gesture.settings.store import SettingsStore
 from ui_control_gesture.system.macos_input import QuartzMacInputController
-from ui_control_gesture.system.permissions import CameraDevice, list_camera_devices, prompt_for_permissions, query_permission_state
+from ui_control_gesture.system.permissions import (
+    CameraDevice,
+    PermissionState,
+    list_camera_devices,
+    open_privacy_settings,
+    permission_summary_text,
+    prompt_for_permissions,
+    query_permission_state,
+)
 from ui_control_gesture.vision.pipeline import MediapipeVisionPipeline
 
 
@@ -31,18 +39,16 @@ class GestureControlApplication:
         return self._settings
 
     def permission_summary(self) -> str:
-        state = query_permission_state()
-        return (
-            f"camera={state.camera} mic={state.microphone} "
-            f"accessibility={state.accessibility} input_monitoring={state.input_monitoring}"
-        )
+        return permission_summary_text(query_permission_state())
 
     def request_permissions(self) -> str:
-        state = prompt_for_permissions()
-        return (
-            f"camera={state.camera} mic={state.microphone} "
-            f"accessibility={state.accessibility} input_monitoring={state.input_monitoring}"
-        )
+        return permission_summary_text(prompt_for_permissions())
+
+    def open_camera_settings(self) -> bool:
+        return open_privacy_settings("camera")
+
+    def open_microphone_settings(self) -> bool:
+        return open_privacy_settings("microphone")
 
     def available_cameras(self) -> list[CameraDevice]:
         return list_camera_devices()
@@ -53,13 +59,17 @@ class GestureControlApplication:
         if permission_state.microphone and self._config.toggles.stt_enabled:
             self._speech.start()
         elif self._config.toggles.stt_enabled:
-            self._handle_runtime_error("microphone permission is required for STT.")
+            self._handle_runtime_error(self._microphone_permission_error(permission_state))
+            if permission_state.microphone_status == "denied":
+                self.open_microphone_settings()
 
         if permission_state.camera:
             self._vision.start()
             self._vision_running = True
         else:
-            self._handle_runtime_error("camera permission is required before gesture tracking can start.")
+            self._handle_runtime_error(self._camera_permission_error(permission_state))
+            if permission_state.camera_status == "denied":
+                self.open_camera_settings()
 
     def stop(self) -> None:
         if self._vision_running:
@@ -156,7 +166,23 @@ class GestureControlApplication:
                 self._vision.start()
                 self._vision_running = True
             else:
-                self._handle_runtime_error("camera permission is required before gesture tracking can start.")
+                self._handle_runtime_error(self._camera_permission_error(permission_state))
+
+    def _camera_permission_error(self, permission_state: PermissionState) -> str:
+        if permission_state.camera_status == "denied":
+            return (
+                "camera permission is denied by macOS. Open System Settings > Privacy & Security > Camera "
+                "and allow the terminal app or Python, then relaunch the app."
+            )
+        return "camera permission is required before gesture tracking can start."
+
+    def _microphone_permission_error(self, permission_state: PermissionState) -> str:
+        if permission_state.microphone_status == "denied":
+            return (
+                "microphone permission is denied by macOS. Open System Settings > Privacy & Security > Microphone "
+                "and allow the terminal app or Python, then relaunch the app."
+            )
+        return "microphone permission is required for STT."
 
     def _build_speech_coordinator(self):
         from ui_control_gesture.audio.backends import build_default_audio_stack

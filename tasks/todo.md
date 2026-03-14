@@ -10,6 +10,7 @@
 - [x] Implement pluggable STT/TTS adapters and settings model selection
 - [x] Add unit tests for gesture mapping and speech coordination
 - [x] Run verification checks and record review notes
+- [x] Differentiate denied vs not-determined macOS capture permissions and add recovery actions
 
 ## Notes
 
@@ -28,3 +29,5 @@
 - Fixed review findings around wake recognizer self-join, stale wake buffers, STT-off suppression of in-flight wake transcripts, and vision runtime error surfacing.
 - Created a repo-local `.venv`, installed runtime dependencies with `pip install -e .`, and downloaded `models/hand_landmarker.task` plus `models/face_landmarker.task`.
 - Confirmed `.venv/` and `models/` are ignored by git so only code and docs are pushed.
+- Added denied-permission recovery flow that opens the relevant macOS Privacy panes when camera or microphone access has already been rejected.
+- Added unit coverage for permission summary text and privacy-settings launch actions.

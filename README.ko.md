@@ -59,6 +59,7 @@ PYTHONPATH=src python3 -m ui_control_gesture
 - 이 앱은 Apple Silicon macOS를 기준으로 설계되었습니다.
 - 카메라, 마이크, 접근성, 입력 모니터링 권한이 필요합니다.
 - 첫 실행 시 추적 시작 전에 카메라와 마이크 권한을 먼저 요청합니다.
+- 카메라나 마이크 권한 팝업이 안 뜨면, macOS가 이미 현재 터미널 앱 또는 Python에 대해 권한을 거부한 상태일 가능성이 큽니다. 이 경우 메뉴바의 `Open Camera Settings`, `Open Microphone Settings`를 눌러 `개인정보 보호 및 보안` 설정으로 이동한 뒤 권한을 켜고 앱을 다시 실행하세요.
 - STT/TTS 백엔드는 로컬 실행을 기본으로 하며 어댑터 구조로 교체할 수 있습니다.
 - `.venv/`와 `models/`는 이 맥북에서만 쓰는 로컬 자산이라 git에 올리지 않습니다.
 - 앞으로 큰 바이너리 파일을 공유해야 하면 일반 git 커밋 대신 GitHub Release asset으로 관리합니다.
