@@ -16,6 +16,7 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             NSStatusBar,
         )
         from Foundation import NSObject
+        from objc import super as objc_super
     except Exception as exc:  # pragma: no cover - macOS-only path
         raise RuntimeError("PyObjC AppKit is required to run the menu bar app.") from exc
 
@@ -33,7 +34,7 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
 
     class AppDelegate(NSObject):  # pragma: no cover - UI wiring
         def init(self):
-            self = super().init()
+            self = objc_super(AppDelegate, self).init()
             if self is None:
                 return None
             self.controller = app_controller
