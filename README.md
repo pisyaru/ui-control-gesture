@@ -12,6 +12,7 @@ Camera-driven macOS control app using MediaPipe hand/head tracking plus modular 
 - Always-on wake-word STT with pluggable ASR backends
 - Pluggable TTS backends for future automation
 - Menu bar controls for hand/head/STT/TTS toggles and calibration
+- Menu bar camera selection for choosing which macOS camera device to use
 
 ## Tech stack
 
@@ -57,6 +58,7 @@ PYTHONPATH=src python3 -m ui_control_gesture
 
 - The app is designed for Apple Silicon macOS.
 - Accessibility, input monitoring, camera, and microphone permissions are required.
+- On first launch the app requests camera and microphone access before starting tracking.
 - STT/TTS backends are local-first and swappable behind adapter interfaces.
 - `.venv/` and `models/` are intentionally local-only and ignored by git.
 - If large binary assets ever need to be shared, use GitHub Release assets rather than normal git history.

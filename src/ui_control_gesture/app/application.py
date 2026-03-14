@@ -7,7 +7,7 @@ from ui_control_gesture.gesture.head_mapper import HeadCaptionAnchorMapper
 from ui_control_gesture.overlay.renderer import AppKitOverlayWindow, OverlayRenderer
 from ui_control_gesture.settings.store import SettingsStore
 from ui_control_gesture.system.macos_input import QuartzMacInputController
-from ui_control_gesture.system.permissions import prompt_for_permissions, query_permission_state
+from ui_control_gesture.system.permissions import CameraDevice, list_camera_devices, prompt_for_permissions, query_permission_state
 from ui_control_gesture.vision.pipeline import MediapipeVisionPipeline
 
 
@@ -22,6 +22,8 @@ class GestureControlApplication:
         self._current_head_anchor = CaptionAnchor.CENTER
         self._speech = self._build_speech_coordinator()
         self._vision = MediapipeVisionPipeline(self._config, self.handle_snapshot, self._handle_runtime_error)
+        self._started = False
+        self._vision_running = False
         self._settings.subscribe(self._handle_settings_change)
 
     @property
@@ -42,16 +44,35 @@ class GestureControlApplication:
             f"accessibility={state.accessibility} input_monitoring={state.input_monitoring}"
         )
 
+    def available_cameras(self) -> list[CameraDevice]:
+        return list_camera_devices()
+
     def start(self) -> None:
-        self._speech.start()
-        self._vision.start()
+        self._started = True
+        permission_state = prompt_for_permissions()
+        if permission_state.microphone and self._config.toggles.stt_enabled:
+            self._speech.start()
+        elif self._config.toggles.stt_enabled:
+            self._handle_runtime_error("microphone permission is required for STT.")
+
+        if permission_state.camera:
+            self._vision.start()
+            self._vision_running = True
+        else:
+            self._handle_runtime_error("camera permission is required before gesture tracking can start.")
 
     def stop(self) -> None:
-        self._vision.stop()
+        if self._vision_running:
+            self._vision.stop()
+            self._vision_running = False
         self._speech.stop()
+        self._started = False
 
     def recalibrate(self) -> None:
         self._current_head_anchor = CaptionAnchor.CENTER
+
+    def set_camera_index(self, camera_index: int) -> None:
+        self._settings.set_camera_index(camera_index)
 
     def handle_snapshot(self, snapshot: VisionSnapshot) -> None:
         config = self._settings.config
@@ -86,11 +107,11 @@ class GestureControlApplication:
                 self._speech.stop_fist_recording(action.cursor)
 
     def _handle_settings_change(self, config: AppConfig) -> None:
-        old_speech = self._config.speech
+        old_config = self._config
         self._config = config
         if (
-            old_speech.stt_model_id != config.speech.stt_model_id
-            or old_speech.tts_model_id != config.speech.tts_model_id
+            old_config.speech.stt_model_id != config.speech.stt_model_id
+            or old_config.speech.tts_model_id != config.speech.tts_model_id
         ):
             self._speech.stop()
             self._speech = self._build_speech_coordinator()
@@ -98,6 +119,9 @@ class GestureControlApplication:
                 self._speech.start()
         else:
             self._speech.apply_config(config)
+
+        if old_config.camera_index != config.camera_index:
+            self._restart_vision()
 
     def _handle_transcript(self, text: str, anchor: CaptionAnchor, cursor: CursorPoint | None) -> None:
         self._overlay.show_caption(
@@ -120,6 +144,19 @@ class GestureControlApplication:
             return AppKitOverlayWindow()
         except Exception:
             return OverlayRenderer()
+
+    def _restart_vision(self) -> None:
+        if self._vision_running:
+            self._vision.stop()
+            self._vision_running = False
+        self._vision = MediapipeVisionPipeline(self._config, self.handle_snapshot, self._handle_runtime_error)
+        if self._started:
+            permission_state = query_permission_state()
+            if permission_state.camera:
+                self._vision.start()
+                self._vision_running = True
+            else:
+                self._handle_runtime_error("camera permission is required before gesture tracking can start.")
 
     def _build_speech_coordinator(self):
         from ui_control_gesture.audio.backends import build_default_audio_stack

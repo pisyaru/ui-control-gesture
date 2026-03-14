@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Thread
@@ -8,6 +9,8 @@ from time import monotonic, sleep
 from typing import Callable
 
 from ui_control_gesture.app.types import HandObservation, Handedness, HeadObservation, VisionSnapshot
+
+os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
 
 def _load_cv2():
@@ -30,6 +33,7 @@ def _load_mediapipe():
 class MediaPipeModels:
     hand_model_path: Path
     face_model_path: Path
+    camera_index: int
 
 
 class MediaPipeVisionPipeline:
@@ -84,9 +88,10 @@ class MediaPipeVisionPipeline:
             mp.tasks.vision.HandLandmarker.create_from_options(hand_options) as hand_landmarker,
             mp.tasks.vision.FaceLandmarker.create_from_options(face_options) as face_landmarker,
         ):
-            camera = cv2.VideoCapture(0)
+            backend = cv2.CAP_AVFOUNDATION if hasattr(cv2, "CAP_AVFOUNDATION") else 0
+            camera = cv2.VideoCapture(self._models.camera_index, backend)
             if not camera.isOpened():
-                raise RuntimeError("Unable to open the default camera.")
+                raise RuntimeError(f"Unable to open camera index {self._models.camera_index}.")
 
             while not self._stop_event.is_set():
                 ok, frame = camera.read()
@@ -165,6 +170,7 @@ class MediapipeVisionPipeline:
             MediaPipeModels(
                 hand_model_path=models_dir / "hand_landmarker.task",
                 face_model_path=models_dir / "face_landmarker.task",
+                camera_index=config.camera_index,
             )
         )
         self._on_snapshot = on_snapshot

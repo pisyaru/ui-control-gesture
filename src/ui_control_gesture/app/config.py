@@ -49,6 +49,7 @@ class AppConfig:
     models_dir: Path = DEFAULT_MODELS_DIR
     hand_landmarker_asset: str = "hand_landmarker.task"
     face_landmarker_asset: str = "face_landmarker.task"
+    camera_index: int = 0
     toggles: FeatureToggles = field(default_factory=FeatureToggles)
     gesture: GestureConfig = field(default_factory=GestureConfig)
     speech: SpeechConfig = field(default_factory=SpeechConfig)

@@ -18,14 +18,22 @@ class SettingsStore:
     def set_feature_toggle(self, name: str, enabled: bool) -> None:
         if not hasattr(self.config.toggles, name):
             raise AttributeError(f"Unknown toggle: {name}")
-        setattr(self.config.toggles, name, enabled)
+        toggles = replace(self.config.toggles, **{name: enabled})
+        self.config = replace(self.config, toggles=toggles)
+        self._notify()
 
     def set_stt_model(self, model_id: str) -> None:
-        self.config.speech.stt_model_id = model_id
+        speech = replace(self.config.speech, stt_model_id=model_id)
+        self.config = replace(self.config, speech=speech)
         self._notify()
 
     def set_tts_model(self, model_id: str) -> None:
-        self.config.speech.tts_model_id = model_id
+        speech = replace(self.config.speech, tts_model_id=model_id)
+        self.config = replace(self.config, speech=speech)
+        self._notify()
+
+    def set_camera_index(self, camera_index: int) -> None:
+        self.config = replace(self.config, camera_index=camera_index)
         self._notify()
 
     def update_toggle(
@@ -36,15 +44,14 @@ class SettingsStore:
         stt: bool | None = None,
         tts: bool | None = None,
     ) -> None:
-        toggles = self.config.toggles
-        if hand is not None:
-            toggles.hand_enabled = hand
-        if head is not None:
-            toggles.head_enabled = head
-        if stt is not None:
-            toggles.stt_enabled = stt
-        if tts is not None:
-            toggles.tts_enabled = tts
+        toggles = replace(
+            self.config.toggles,
+            hand_enabled=self.config.toggles.hand_enabled if hand is None else hand,
+            head_enabled=self.config.toggles.head_enabled if head is None else head,
+            stt_enabled=self.config.toggles.stt_enabled if stt is None else stt,
+            tts_enabled=self.config.toggles.tts_enabled if tts is None else tts,
+        )
+        self.config = replace(self.config, toggles=toggles)
         self._notify()
 
     def subscribe(self, callback: Callable[[AppConfig], None]) -> None:

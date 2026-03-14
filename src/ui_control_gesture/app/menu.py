@@ -45,12 +45,15 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             self.tts_item = None
             self.stt_model_items = {}
             self.tts_model_items = {}
+            self.camera_items = {}
+            self.camera_root_item = None
             return self
 
         def applicationDidFinishLaunching_(self, _notification) -> None:
             self.status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(-1.0)
             self.status_item.button().setTitle_("UI")
 
+            self.controller.start()
             menu = NSMenu.alloc().init()
 
             self.hand_item = self._toggle_item("Hand Gesture", "toggleHand_")
@@ -63,6 +66,10 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             menu.addItem_(self.stt_item)
             menu.addItem_(self.tts_item)
             menu.addItem_(NSMenuItem.separatorItem())
+
+            self.camera_root_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Camera", None, "")
+            self.camera_root_item.setSubmenu_(self._camera_submenu())
+            menu.addItem_(self.camera_root_item)
 
             stt_model_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("STT Model", None, "")
             stt_model_item.setSubmenu_(self._model_submenu(stt_models, is_tts=False))
@@ -85,9 +92,8 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             quit_item.setTarget_(self)
             menu.addItem_(quit_item)
 
-            self.status_item.setMenu_(menu)
             self._sync_toggle_states()
-            self.controller.start()
+            self.status_item.setMenu_(menu)
 
         def _toggle_item(self, title: str, action_name: str):
             item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action_name, "")
@@ -111,6 +117,23 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
                     self.stt_model_items[model_id] = item
             return submenu
 
+        def _camera_submenu(self):
+            submenu = NSMenu.alloc().init()
+            self.camera_items = {}
+            cameras = self.controller.available_cameras()
+            if not cameras:
+                item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("No camera found", None, "")
+                item.setEnabled_(False)
+                submenu.addItem_(item)
+                return submenu
+            for camera in cameras:
+                item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(camera.name, "selectCamera_", "")
+                item.setTarget_(self)
+                item.setRepresentedObject_(camera.index)
+                submenu.addItem_(item)
+                self.camera_items[camera.index] = item
+            return submenu
+
         def _sync_toggle_states(self) -> None:
             toggles = self.controller.settings.config.toggles
             self.hand_item.setState_(NSControlStateValueOn if toggles.hand_enabled else NSControlStateValueOff)
@@ -119,10 +142,13 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             self.tts_item.setState_(NSControlStateValueOn if toggles.tts_enabled else NSControlStateValueOff)
             current_stt = self.controller.settings.config.speech.stt_model_id
             current_tts = self.controller.settings.config.speech.tts_model_id
+            current_camera_index = self.controller.settings.config.camera_index
             for model_id, item in self.stt_model_items.items():
                 item.setState_(NSControlStateValueOn if model_id == current_stt else NSControlStateValueOff)
             for model_id, item in self.tts_model_items.items():
                 item.setState_(NSControlStateValueOn if model_id == current_tts else NSControlStateValueOff)
+            for camera_index, item in self.camera_items.items():
+                item.setState_(NSControlStateValueOn if camera_index == current_camera_index else NSControlStateValueOff)
 
         def toggleHand_(self, _sender) -> None:
             toggles = self.controller.settings.config.toggles
@@ -151,6 +177,7 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             alert.setMessageText_("Permissions")
             alert.setInformativeText_(self.controller.request_permissions())
             alert.runModal()
+            self._refresh_camera_submenu()
 
         def recalibrate_(self, _sender) -> None:
             self.controller.recalibrate()
@@ -164,6 +191,16 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             model_id = str(sender.representedObject())
             self.controller.settings.set_tts_model(model_id)
             self._sync_toggle_states()
+
+        def selectCamera_(self, sender) -> None:
+            camera_index = int(sender.representedObject())
+            self.controller.set_camera_index(camera_index)
+            self._sync_toggle_states()
+
+        def _refresh_camera_submenu(self) -> None:
+            if self.camera_root_item is not None:
+                self.camera_root_item.setSubmenu_(self._camera_submenu())
+                self._sync_toggle_states()
 
         def quit_(self, _sender) -> None:
             self.controller.stop()

@@ -14,6 +14,11 @@ class SettingsStoreTests(unittest.TestCase):
 
         self.assertEqual(seen, [False])
 
+    def test_settings_store_updates_camera_index(self) -> None:
+        store = SettingsStore(default_config())
+        store.set_camera_index(2)
+        self.assertEqual(store.config.camera_index, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
