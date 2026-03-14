@@ -46,6 +46,12 @@ class CursorPoint:
 
 
 @dataclass(slots=True)
+class NormalizedPoint:
+    x: float
+    y: float
+
+
+@dataclass(slots=True)
 class ScrollDelta:
     dy: float
 
@@ -64,6 +70,7 @@ class HandObservation:
     palm_x: float
     palm_y: float
     palm_roll: float
+    landmarks: tuple[NormalizedPoint, ...] = field(default_factory=tuple)
     index_thumb_touching: bool = False
     middle_thumb_touching: bool = False
     fist_closed: bool = False
@@ -98,8 +105,9 @@ class TranscriptResult:
 @dataclass(slots=True)
 class HandFeedback:
     handedness: Handedness
-    cursor: CursorPoint
+    cursor: CursorPoint | None
     state_label: str
+    skeleton_points: tuple[CursorPoint, ...] = field(default_factory=tuple)
 
 
 @dataclass(slots=True)

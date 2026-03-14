@@ -8,7 +8,7 @@ from threading import Event, Thread
 from time import monotonic, sleep
 from typing import Callable
 
-from ui_control_gesture.app.types import HandObservation, Handedness, HeadObservation, VisionSnapshot
+from ui_control_gesture.app.types import HandObservation, Handedness, HeadObservation, NormalizedPoint, VisionSnapshot
 
 os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
@@ -134,6 +134,7 @@ class MediaPipeVisionPipeline:
                     palm_x=wrist.x,
                     palm_y=wrist.y,
                     palm_roll=palm_roll,
+                    landmarks=tuple(NormalizedPoint(x=point.x, y=point.y) for point in landmarks),
                     index_thumb_touching=_distance(index_tip, thumb_tip) < 0.05,
                     middle_thumb_touching=_distance(middle_tip, thumb_tip) < 0.05,
                     fist_closed=max(fingertip_distances) < 0.25,

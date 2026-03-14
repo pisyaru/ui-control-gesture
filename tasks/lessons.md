@@ -13,3 +13,4 @@
 - Any AppKit `NSWindow` show/hide/update call triggered by timers, vision callbacks, or worker threads must be marshaled back to the main thread first.
 - When a mixed dependency loader spans unrelated macOS frameworks, isolate imports by subsystem; one missing module must not collapse unrelated permission paths like camera status.
 - For local runtime bugs, verify the fix with direct environment probes first; do not hand the first validation step back to the user.
+- For gesture-visualization requests, do not default to a tiny HUD; confirm whether the user wants a full mirrored body-part overlay that matches real perceived size and position.

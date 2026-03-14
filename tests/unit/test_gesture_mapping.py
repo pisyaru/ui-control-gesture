@@ -1,7 +1,7 @@
 import unittest
 
 from ui_control_gesture.app.config import GestureConfig
-from ui_control_gesture.app.types import GestureActionType, HandObservation, Handedness, HeadObservation
+from ui_control_gesture.app.types import GestureActionType, HandObservation, Handedness, HeadObservation, NormalizedPoint
 from ui_control_gesture.gesture.hand_mapper import PrimaryHandMapper, SecondaryHandMapper
 from ui_control_gesture.gesture.head_mapper import HeadAnchorMapper
 from ui_control_gesture.system.macos_input import ScreenSize
@@ -15,6 +15,7 @@ class GestureMappingTests(unittest.TestCase):
             palm_x=0.5,
             palm_y=0.5,
             palm_roll=0.0,
+            landmarks=(NormalizedPoint(x=0.5, y=0.5),),
             index_thumb_touching=True,
         )
         actions, feedback = mapper.map(hand)
@@ -30,6 +31,7 @@ class GestureMappingTests(unittest.TestCase):
                 palm_x=0.5,
                 palm_y=0.5,
                 palm_roll=0.0,
+                landmarks=(NormalizedPoint(x=0.5, y=0.5),),
                 index_thumb_touching=False,
             )
         )
@@ -47,6 +49,7 @@ class GestureMappingTests(unittest.TestCase):
                 palm_x=0.5,
                 palm_y=0.5,
                 palm_roll=0.0,
+                landmarks=(NormalizedPoint(x=0.5, y=0.5),),
                 fist_closed=True,
             )
         )
@@ -61,6 +64,7 @@ class GestureMappingTests(unittest.TestCase):
                 palm_x=0.5,
                 palm_y=0.5,
                 palm_roll=0.0,
+                landmarks=(NormalizedPoint(x=0.5, y=0.5),),
                 fist_closed=False,
             )
         )
@@ -70,18 +74,20 @@ class GestureMappingTests(unittest.TestCase):
         )
 
     def test_secondary_hand_maps_middle_swipe_to_scroll(self) -> None:
-        mapper = SecondaryHandMapper(GestureConfig(scroll_deadzone=0.02))
-        actions = mapper.map(
+        mapper = SecondaryHandMapper(GestureConfig(scroll_deadzone=0.02), ScreenSize(width=1000.0, height=800.0))
+        actions, feedback = mapper.map(
             HandObservation(
                 handedness=Handedness.LEFT,
                 palm_x=0.25,
                 palm_y=0.3,
                 palm_roll=0.0,
+                landmarks=(NormalizedPoint(x=0.25, y=0.3),),
                 middle_swipe_velocity_y=0.2,
             )
         )
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].kind, GestureActionType.SCROLL)
+        self.assertEqual(feedback.state_label, "scroll")
 
     def test_head_anchor_mapper_uses_five_zones(self) -> None:
         mapper = HeadAnchorMapper(yaw_threshold=0.05, pitch_threshold=0.05)

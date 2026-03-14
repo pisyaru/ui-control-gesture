@@ -80,44 +80,65 @@ class PrimaryHandMapper:
             self._state.right_pinch_frames = 0
 
         self._state.last_cursor = cursor
-        feedback = HandFeedback(handedness=hand.handedness, cursor=cursor, state_label=state_label)
+        feedback = self._feedback_from_hand(hand, cursor=cursor, state_label=state_label)
         return actions, feedback
 
     def _cursor_from_hand(self, hand: HandObservation) -> CursorPoint:
-        x = hand.palm_x * self._screen_size.width + (hand.palm_roll * self._config.roll_micro_adjust_gain)
+        x = ((1.0 - hand.palm_x) * self._screen_size.width) - (hand.palm_roll * self._config.roll_micro_adjust_gain)
         y = hand.palm_y * self._screen_size.height
         x = min(max(x, 0.0), self._screen_size.width - 1.0)
         y = min(max(y, 0.0), self._screen_size.height - 1.0)
         return CursorPoint(x=x, y=y)
 
+    def _feedback_from_hand(self, hand: HandObservation, *, cursor: CursorPoint, state_label: str) -> HandFeedback:
+        return HandFeedback(
+            handedness=hand.handedness,
+            cursor=cursor,
+            state_label=state_label,
+            skeleton_points=_project_skeleton(hand, self._screen_size),
+        )
+
 
 class SecondaryHandMapper:
-    def __init__(self, config: GestureConfig) -> None:
+    def __init__(self, config: GestureConfig, screen_size: ScreenSize) -> None:
         self._config = config
+        self._screen_size = screen_size
 
-    def map(self, hand: HandObservation) -> list[GestureAction]:
+    def map(self, hand: HandObservation) -> tuple[list[GestureAction], HandFeedback]:
+        state_label = "ready"
         if abs(hand.middle_swipe_velocity_y) < self._config.scroll_deadzone:
-            return []
+            return [], self._feedback_from_hand(hand, state_label=state_label)
+        state_label = "scroll"
         return [
             GestureAction(
                 kind=GestureActionType.SCROLL,
                 handedness=hand.handedness,
                 scroll=ScrollDelta(dy=hand.middle_swipe_velocity_y),
             )
-        ]
+        ], self._feedback_from_hand(hand, state_label=state_label)
+
+    def _feedback_from_hand(self, hand: HandObservation, *, state_label: str) -> HandFeedback:
+        anchor = _project_point(hand.palm_x, hand.palm_y, self._screen_size)
+        return HandFeedback(
+            handedness=hand.handedness,
+            cursor=anchor,
+            state_label=state_label,
+            skeleton_points=_project_skeleton(hand, self._screen_size),
+        )
 
 
 class HandGestureMapper:
     def __init__(self, config: GestureConfig) -> None:
         self._config = config
         self._primary: PrimaryHandMapper | None = None
-        self._secondary = SecondaryHandMapper(config)
+        self._secondary: SecondaryHandMapper | None = None
         self._screen_size: ScreenSize | None = None
 
     def map(self, hands: list[HandObservation], screen_width: float, screen_height: float) -> tuple[list[GestureAction], list[HandFeedback]]:
         screen_size = ScreenSize(width=screen_width, height=screen_height)
         if self._primary is None or self._screen_size != screen_size:
             self._primary = PrimaryHandMapper(self._config, screen_size)
+            self._secondary = SecondaryHandMapper(self._config, screen_size)
             self._screen_size = screen_size
 
         actions: list[GestureAction] = []
@@ -127,6 +148,18 @@ class HandGestureMapper:
                 mapped_actions, hand_feedback = self._primary.map(hand)
                 actions.extend(mapped_actions)
                 feedback.append(hand_feedback)
-            elif hand.handedness is Handedness.LEFT:
-                actions.extend(self._secondary.map(hand))
+            elif hand.handedness is Handedness.LEFT and self._secondary is not None:
+                mapped_actions, hand_feedback = self._secondary.map(hand)
+                actions.extend(mapped_actions)
+                feedback.append(hand_feedback)
         return actions, feedback
+
+
+def _project_point(x: float, y: float, screen_size: ScreenSize) -> CursorPoint:
+    projected_x = min(max((1.0 - x) * screen_size.width, 0.0), screen_size.width - 1.0)
+    projected_y = min(max(y * screen_size.height, 0.0), screen_size.height - 1.0)
+    return CursorPoint(x=projected_x, y=projected_y)
+
+
+def _project_skeleton(hand: HandObservation, screen_size: ScreenSize) -> tuple[CursorPoint, ...]:
+    return tuple(_project_point(point.x, point.y, screen_size) for point in hand.landmarks)

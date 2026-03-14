@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 from typing import Callable
 
 
@@ -15,7 +16,7 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             NSMenuItem,
             NSStatusBar,
         )
-        from Foundation import NSObject
+        from Foundation import NSObject, NSTimer
         from objc import super as objc_super
     except Exception as exc:  # pragma: no cover - macOS-only path
         raise RuntimeError("PyObjC AppKit is required to run the menu bar app.") from exc
@@ -49,12 +50,16 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
             self.tts_model_items = {}
             self.camera_items = {}
             self.camera_root_item = None
+            self.signal_timer = None
             return self
 
         def applicationDidFinishLaunching_(self, _notification) -> None:
             self.status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(-1.0)
             self.status_item.button().setTitle_("UI")
+            if hasattr(self.status_item, "setVisible_"):
+                self.status_item.setVisible_(True)
             self.controller.activate_ui()
+            self.signal_timer = _install_sigint_handler(NSApp(), self.controller, NSTimer, NSObject, objc_super)
 
             self.controller.start()
             menu = NSMenu.alloc().init()
@@ -233,3 +238,34 @@ def run_menu_bar_app(factory: Callable[[], object]) -> None:
     delegate = AppDelegate.alloc().init()
     app.setDelegate_(delegate)
     app.run()
+
+
+def _install_sigint_handler(app, controller, timer_class, ns_object_class, objc_super):  # pragma: no cover - runtime only
+    previous_handler = signal.getsignal(signal.SIGINT)
+
+    def handle_sigint(_signum, _frame) -> None:
+        controller.stop()
+        app.terminate_(None)
+
+    signal.signal(signal.SIGINT, handle_sigint)
+
+    class _SignalPump(ns_object_class):
+        def init(self):
+            self = objc_super(_SignalPump, self).init()
+            return self
+
+        def tick_(self, _timer) -> None:
+            return None
+
+    pump = _SignalPump.alloc().init()
+    timer = timer_class.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+        0.25,
+        pump,
+        "tick:",
+        None,
+        True,
+    )
+    timer._python_signal_handler = handle_sigint
+    timer._previous_signal_handler = previous_handler
+    timer._signal_pump = pump
+    return timer

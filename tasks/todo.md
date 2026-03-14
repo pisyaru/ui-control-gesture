@@ -15,6 +15,9 @@
 - [x] Defer AppKit window creation until after NSApplication startup
 - [x] Force all AppKit overlay window updates onto the main thread
 - [x] Decouple capture permission loading from accessibility imports
+- [x] Mirror right-hand cursor movement to match camera semantics
+- [x] Add full-size mirrored skeleton overlay feedback for both hands
+- [x] Harden overlay focus and add a terminal-based quit fallback
 
 ## Notes
 
@@ -39,3 +42,6 @@
 - Moved AppKit overlay creation behind NSApplication startup so native windows are not created before the menu bar app is initialized.
 - Routed overlay render requests through a main-thread bridge so transcript timers and vision callbacks never touch `NSWindow` off the main thread.
 - Split the permission loader by subsystem so missing accessibility bindings no longer collapse camera and microphone status to `unavailable`.
+- Mirrored the right-hand cursor mapping and mirrored skeleton projection so horizontal movement matches user expectation.
+- Extended hand observations and feedback to carry 21-point hand landmarks, then rendered both hands on a full-screen transparent overlay.
+- Added a terminal-visible quit hint and AppKit signal pump so `Ctrl+C` can terminate the app even if the menu bar item is unavailable.

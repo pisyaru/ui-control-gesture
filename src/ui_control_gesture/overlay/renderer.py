@@ -1,9 +1,33 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Lock, Timer, current_thread, main_thread
 
-from ui_control_gesture.app.types import CaptionAnchor, CursorPoint, HandFeedback, TranscriptResult
+from ui_control_gesture.app.types import CaptionAnchor, CursorPoint, HandFeedback, Handedness, TranscriptResult
+
+HAND_CONNECTIONS: tuple[tuple[int, int], ...] = (
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 4),
+    (0, 5),
+    (5, 6),
+    (6, 7),
+    (7, 8),
+    (5, 9),
+    (9, 10),
+    (10, 11),
+    (11, 12),
+    (9, 13),
+    (13, 14),
+    (14, 15),
+    (15, 16),
+    (13, 17),
+    (17, 18),
+    (18, 19),
+    (19, 20),
+    (0, 17),
+)
 
 
 def _load_appkit():
@@ -16,7 +40,7 @@ def _load_appkit():
 
 @dataclass(slots=True)
 class OverlayState:
-    hand_feedback: HandFeedback | None = None
+    hand_feedback: list[HandFeedback] = field(default_factory=list)
     transcript: TranscriptResult | None = None
 
 
@@ -27,11 +51,9 @@ class OverlayRenderer:
         self._lock = Lock()
 
     def show_hand_feedback(self, feedback: HandFeedback | list[HandFeedback] | None) -> None:
-        primary_feedback = feedback
-        if isinstance(feedback, list):
-            primary_feedback = feedback[0] if feedback else None
+        normalized = _normalize_feedback(feedback)
         with self._lock:
-            self._state.hand_feedback = primary_feedback
+            self._state.hand_feedback = normalized
         if self._appkit is not None:  # pragma: no cover - runtime only
             self._request_render()
 
@@ -51,12 +73,11 @@ class OverlayRenderer:
     def current_state(self) -> OverlayState:
         with self._lock:
             return OverlayState(
-                hand_feedback=self._state.hand_feedback,
+                hand_feedback=list(self._state.hand_feedback),
                 transcript=self._state.transcript,
             )
 
     def _render(self) -> None:  # pragma: no cover - runtime only
-        # Placeholder AppKit hook. The app shell reads `current_state()` and paints the floating labels.
         return None
 
     def _request_render(self) -> None:  # pragma: no cover - runtime only
@@ -94,7 +115,7 @@ class AppKitOverlayWindow(OverlayRenderer):
     def __init__(self) -> None:
         super().__init__()
         self._window = None
-        self._label = None
+        self._canvas = None
         self._render_bridge = None
         if self._appkit is not None:  # pragma: no cover - runtime only
             self._render_bridge = _build_main_thread_bridge(self._render)
@@ -112,66 +133,207 @@ class AppKitOverlayWindow(OverlayRenderer):
         appkit = self._appkit
         if appkit is None:
             return
-        window = appkit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            ((0.0, 0.0), (420.0, 96.0)),
-            appkit.NSWindowStyleMaskBorderless,
+        screen = appkit.NSScreen.mainScreen()
+        if screen is None:
+            return
+        frame = screen.frame()
+        frame_rect = ((frame.origin.x, frame.origin.y), (frame.size.width, frame.size.height))
+        panel_class = _build_overlay_panel_class(appkit)
+        style_mask = appkit.NSWindowStyleMaskBorderless | getattr(appkit, "NSWindowStyleMaskNonactivatingPanel", 0)
+        window = panel_class.alloc().initWithContentRect_styleMask_backing_defer_(
+            frame_rect,
+            style_mask,
             appkit.NSBackingStoreBuffered,
             False,
         )
         window.setOpaque_(False)
         window.setBackgroundColor_(appkit.NSColor.clearColor())
         window.setIgnoresMouseEvents_(True)
+        window.setHasShadow_(False)
+        window.setHidesOnDeactivate_(False)
+        window.setFloatingPanel_(True)
         window.setLevel_(appkit.NSFloatingWindowLevel)
-        window.setCollectionBehavior_(appkit.NSWindowCollectionBehaviorCanJoinAllSpaces)
+        window.setCollectionBehavior_(
+            appkit.NSWindowCollectionBehaviorCanJoinAllSpaces
+            | getattr(appkit, "NSWindowCollectionBehaviorFullScreenAuxiliary", 0)
+        )
 
-        label = appkit.NSTextField.alloc().initWithFrame_(((12.0, 20.0), (396.0, 56.0)))
-        label.setEditable_(False)
-        label.setBordered_(False)
-        label.setSelectable_(False)
-        label.setDrawsBackground_(False)
-        label.setTextColor_(appkit.NSColor.whiteColor())
-        label.setFont_(appkit.NSFont.boldSystemFontOfSize_(20.0))
-        label.setAlignment_(appkit.NSTextAlignmentCenter)
-
-        content = appkit.NSView.alloc().initWithFrame_(((0.0, 0.0), (420.0, 96.0)))
-        content.addSubview_(label)
-        window.setContentView_(content)
+        canvas = _build_overlay_canvas(self, frame_rect)
+        window.setContentView_(canvas)
         window.orderFrontRegardless()
 
         self._window = window
-        self._label = label
+        self._canvas = canvas
         self._render()
 
     def _render(self) -> None:  # pragma: no cover - runtime only
         appkit = self._appkit
-        if appkit is None or self._window is None or self._label is None:
+        if appkit is None or self._window is None or self._canvas is None:
             return
-        state = self.current_state()
-        screen = appkit.NSScreen.mainScreen()
-        if screen is None:
-            return
-        frame = screen.visibleFrame()
 
-        if state.transcript is not None:
-            target = anchor_to_screen_position(
-                state.transcript.anchor,
-                state.transcript.cursor,
-                width=frame.size.width,
-                height=frame.size.height,
-            )
-            text = state.transcript.text
-        elif state.hand_feedback is not None:
-            target = state.hand_feedback.cursor
-            text = f"\u270b {state.hand_feedback.handedness.value}: {state.hand_feedback.state_label}"
-        else:
+        state = self.current_state()
+        if not state.hand_feedback and state.transcript is None:
             self._window.orderOut_(None)
             return
 
-        self._label.setStringValue_(text)
-        x = max(0.0, min(frame.size.width - 420.0, target.x - 210.0))
-        y = max(0.0, min(frame.size.height - 96.0, frame.size.height - target.y))
-        self._window.setFrameOrigin_((x, y))
+        screen = appkit.NSScreen.mainScreen()
+        if screen is None:
+            return
+        frame = screen.frame()
+        frame_rect = ((frame.origin.x, frame.origin.y), (frame.size.width, frame.size.height))
+        self._window.setFrame_display_(frame_rect, False)
+        self._canvas.setFrame_(((0.0, 0.0), (frame.size.width, frame.size.height)))
+        self._canvas.updateState_(state)
         self._window.orderFrontRegardless()
+
+
+def _normalize_feedback(feedback: HandFeedback | list[HandFeedback] | None) -> list[HandFeedback]:
+    if feedback is None:
+        return []
+    if isinstance(feedback, list):
+        return list(feedback)
+    return [feedback]
+
+
+def _build_overlay_panel_class(appkit):  # pragma: no cover - runtime only
+    from objc import super as objc_super
+
+    class _OverlayPanel(appkit.NSPanel):
+        def canBecomeKeyWindow(self):
+            return False
+
+        def canBecomeMainWindow(self):
+            return False
+
+        def initWithContentRect_styleMask_backing_defer_(self, rect, style_mask, backing, defer):
+            self = objc_super(_OverlayPanel, self).initWithContentRect_styleMask_backing_defer_(
+                rect,
+                style_mask,
+                backing,
+                defer,
+            )
+            if self is None:
+                return None
+            self.setBecomesKeyOnlyIfNeeded_(False)
+            return self
+
+    return _OverlayPanel
+
+
+def _build_overlay_canvas(renderer: AppKitOverlayWindow, frame_rect):  # pragma: no cover - runtime only
+    appkit = renderer._appkit
+    if appkit is None:
+        return None
+
+    from Foundation import NSString
+    from objc import super as objc_super
+
+    class _OverlayCanvas(appkit.NSView):
+        def initWithFrame_renderer_(self, frame, bound_renderer):
+            self = objc_super(_OverlayCanvas, self).initWithFrame_(frame)
+            if self is None:
+                return None
+            self._renderer = bound_renderer
+            self._state = OverlayState()
+            return self
+
+        def isOpaque(self):
+            return False
+
+        def updateState_(self, state: OverlayState) -> None:
+            self._state = state
+            self.setNeedsDisplay_(True)
+
+        def drawRect_(self, dirty_rect) -> None:
+            appkit.NSColor.clearColor().set()
+            appkit.NSRectFill(dirty_rect)
+
+            bounds = self.bounds()
+            width = bounds.size.width
+            height = bounds.size.height
+
+            for hand_feedback in self._state.hand_feedback:
+                _draw_hand_feedback(appkit, NSString, hand_feedback, height)
+
+            if self._state.transcript is not None:
+                _draw_transcript(appkit, NSString, self._state.transcript, width=width, height=height)
+
+    return _OverlayCanvas.alloc().initWithFrame_renderer_(frame_rect, renderer)
+
+
+def _draw_hand_feedback(appkit, ns_string_class, feedback: HandFeedback, screen_height: float) -> None:  # pragma: no cover - runtime only
+    if feedback.skeleton_points:
+        stroke_color = (
+            appkit.NSColor.systemCyanColor()
+            if feedback.handedness is Handedness.RIGHT
+            else appkit.NSColor.systemGreenColor()
+        )
+        fill_color = (
+            appkit.NSColor.systemBlueColor()
+            if feedback.handedness is Handedness.RIGHT
+            else appkit.NSColor.systemYellowColor()
+        )
+        stroke_color.setStroke()
+        for start_index, end_index in HAND_CONNECTIONS:
+            if start_index >= len(feedback.skeleton_points) or end_index >= len(feedback.skeleton_points):
+                continue
+            start = _to_appkit_point(feedback.skeleton_points[start_index], screen_height)
+            end = _to_appkit_point(feedback.skeleton_points[end_index], screen_height)
+            path = appkit.NSBezierPath.bezierPath()
+            path.setLineWidth_(5.0)
+            path.moveToPoint_(start)
+            path.lineToPoint_(end)
+            path.stroke()
+        fill_color.setFill()
+        for point in feedback.skeleton_points:
+            appkit_point = _to_appkit_point(point, screen_height)
+            oval_rect = ((appkit_point[0] - 5.0, appkit_point[1] - 5.0), (10.0, 10.0))
+            appkit.NSBezierPath.bezierPathWithOvalInRect_(oval_rect).fill()
+
+    if feedback.cursor is not None:
+        label_origin = _to_appkit_point(feedback.cursor, screen_height)
+        _draw_text(
+            appkit,
+            ns_string_class,
+            f"{feedback.handedness.value}: {feedback.state_label}",
+            (label_origin[0] + 18.0, label_origin[1] + 18.0),
+            font_size=18.0,
+            color=appkit.NSColor.whiteColor(),
+        )
+
+
+def _draw_transcript(appkit, ns_string_class, transcript: TranscriptResult, *, width: float, height: float) -> None:  # pragma: no cover - runtime only
+    target = anchor_to_screen_position(transcript.anchor, transcript.cursor, width=width, height=height)
+    appkit_point = _to_appkit_point(target, height)
+    text_rect = ((max(16.0, appkit_point[0] - 280.0), max(16.0, appkit_point[1] - 36.0)), (560.0, 72.0))
+    background = appkit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(text_rect, 18.0, 18.0)
+    appkit.NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.86).setFill()
+    background.fill()
+    _draw_text(
+        appkit,
+        ns_string_class,
+        transcript.text,
+        (text_rect[0][0] + 16.0, text_rect[0][1] + 20.0),
+        font_size=24.0,
+        color=appkit.NSColor.whiteColor(),
+    )
+
+
+def _draw_text(appkit, ns_string_class, text: str, point, *, font_size: float, color) -> None:  # pragma: no cover - runtime only
+    font = None
+    if hasattr(appkit.NSFont, "monospacedSystemFontOfSize_weight_"):
+        font = appkit.NSFont.monospacedSystemFontOfSize_weight_(font_size, getattr(appkit, "NSFontWeightSemibold", 0.6))
+    if font is None:
+        font = appkit.NSFont.boldSystemFontOfSize_(font_size)
+    attributes = {
+        appkit.NSFontAttributeName: font,
+        appkit.NSForegroundColorAttributeName: color,
+    }
+    ns_string_class.stringWithString_(text).drawAtPoint_withAttributes_(point, attributes)
+
+
+def _to_appkit_point(point: CursorPoint, screen_height: float) -> tuple[float, float]:
+    return point.x, screen_height - point.y
 
 
 def _build_main_thread_bridge(callback):  # pragma: no cover - runtime only
